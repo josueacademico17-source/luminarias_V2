@@ -4,19 +4,14 @@
  * Sistema de coordenadas (metros):
  *   x = a lo largo de la vía (muestra de -90 a +90 m ≈ 180 m)
  *   y = altura
- *   z = sección transversal (+z = andén con árboles/edificios que se ve en las fotos)
+ *   z = sección transversal (+z = andén sur, el de las fotos)
  *
- * Datos del proyecto tomados del Excel (MML): 20 luminarias nuevas con poste,
- * 8 existentes reubicadas, 30 luminarias LED. Todo lo demás (alturas,
- * interdistancias, anchos) es aproximación visual y está marcado como tal.
- *
- * MEJORAS v2:
- *  - Peatones animados con caminata (brazos/piernas), variedad, espera en paradero.
- *  - Pool de luz en el suelo bajo cada luminaria (más realista de noche).
- *  - Parpadeo sutil en luminarias existentes en falla.
- *  - Balanceo de árboles por viento.
- *  - Capa "Peatones" con atajo P.
- *  - NO se agregan luminarias fuera del alcance del Excel.
+ * ALCANCE v3:
+ *   - Solo luminarias EXISTENTES del separador central.
+ *   - NO se agregan ni se reubican luminarias.
+ *   - ANTES: cada existente tiene un estado (OK / baja intensidad / en falla).
+ *   - DESPUÉS: esas mismas luminarias se corrigen (encienden y/o suben a LED).
+ *   - Peatones SOLO en el andén sur (caminando o esperando).
  */
 (function () {
   'use strict';
@@ -34,8 +29,6 @@
   // ---------------------------------------------------------------------------
   // Configuración
   // ---------------------------------------------------------------------------
-  const PROJECT = { newTotal: 20, relocatedTotal: 8, ledTotal: 30 };
-
   const SAMPLE_HALF = 90;
   const WORLD_HALF = 170;
 
@@ -49,8 +42,6 @@
     stripN: [-15.5, -13],
   };
   const KERB = 0.16;
-  const NEW_POLE_Z = 10.6;
-  const NEW_ARM = 2.0;
   const MED_ARM = 1.8;
 
   const params = {
@@ -62,25 +53,41 @@
     labels: true,
     markers: true,
     traffic: true,
-    pedestrians: true,   // NUEVO
+    pedestrians: true,
   };
 
   const state = { after: false, night: false, view: 'aerial' };
 
-  const MEDIAN_DEF = [
-    { id: 'E-01', kind: 'existing', x: -78, before: 0.35, note: 'Baja intensidad (ilustrativo)' },
-    { id: 'E-02', kind: 'existing', x: -46, before: 1.0 },
-    { id: 'R-01', kind: 'relocated', x: -39, xAfter: 30, before: 1.0 },
-    { id: 'E-03', kind: 'existing', x: -6, before: 0.0, note: 'Apagada / en falla (ilustrativo)' },
-    { id: 'R-02', kind: 'relocated', x: 1, xAfter: 64, before: 1.0 },
+  // Luminarias EXISTENTES del separador central.
+  // status: 'ok' | 'dim' | 'fault'
+  //   ok    → enciende a plena intensidad (pero con tecnología ámbar en ANTES)
+  //   dim   → enciende con baja intensidad
+  //   fault → no enciende (apagada / en falla)
+  // Las posiciones son ilustrativas, distribuidas de forma aproximadamente regular
+  // a lo largo de los ~180 m de la muestra. NO se reubican en DESPUÉS.
+  const EXISTING_DEF = [
+    { id: 'E-01', x: -84, status: 'ok' },
+    { id: 'E-02', x: -70, status: 'dim',  note: 'Baja intensidad (lámpara degradada)' },
+    { id: 'E-03', x: -56, status: 'ok' },
+    { id: 'E-04', x: -42, status: 'fault', note: 'Apagada / en falla' },
+    { id: 'E-05', x: -28, status: 'ok' },
+    { id: 'E-06', x: -14, status: 'dim',  note: 'Baja intensidad (balasto)' },
+    { id: 'E-07', x:   0, status: 'ok' },
+    { id: 'E-08', x:  14, status: 'ok' },
+    { id: 'E-09', x:  28, status: 'fault', note: 'Apagada / en falla' },
+    { id: 'E-10', x:  42, status: 'ok' },
+    { id: 'E-11', x:  56, status: 'dim',  note: 'Baja intensidad (suciedad del difusor)' },
+    { id: 'E-12', x:  70, status: 'ok' },
+    { id: 'E-13', x:  84, status: 'fault', note: 'Apagada / en falla' },
   ];
 
   const COLORS = {
     amber: new THREE.Color(0xffa63d),
     led: new THREE.Color(0xeef4ff),
-    existing: 0x5aa9ff,
-    new: 0x34d399,
-    relocated: 0xf59e0b,
+    ok: 0x5aa9ff,
+    dim: 0xf59e0b,
+    fault: 0x34d399,   // verde = "a corregir" (queda bien visible)
+    utility: 0x8b8f98,
   };
 
   function mulberry32(a) {
@@ -166,8 +173,6 @@
     return new THREE.CanvasTexture(c);
   }
   const glowTex = radialTexture('rgba(255,255,255,1)', 'rgba(255,255,255,0)');
-
-  // Textura para el pool de luz en el suelo
   function poolTexture() {
     const c = document.createElement('canvas');
     c.width = c.height = 128;
@@ -187,7 +192,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Cielo, estrellas e iluminación ambiental
+  // Cielo, estrellas e iluminación
   // ---------------------------------------------------------------------------
   const SKY = {
     day: { top: new THREE.Color(0x3f86de), hor: new THREE.Color(0xd4e7f7), bot: new THREE.Color(0xa9bccb), fog: new THREE.Color(0xcfe0ee) },
@@ -286,7 +291,6 @@
   addBox(LEN, 0.12, XS.stripN[1] - XS.stripN[0], stripGrass, 0, 0.06, (XS.stripN[0] + XS.stripN[1]) / 2);
 
   (function markings() {
-    const white = new THREE.MeshBasicMaterial({ color: 0xe9e9e4 });
     const dashLen = 3, period = 8;
     const nDash = Math.floor(LEN / period);
     const dashGeo = new THREE.PlaneGeometry(dashLen, 0.15);
@@ -309,7 +313,6 @@
       line.receiveShadow = true;
       scene.add(line);
     });
-    void white;
   })();
 
   // ---------------------------------------------------------------------------
@@ -333,7 +336,6 @@
     }
   })();
 
-  // Guardamos referencia a los troncos/copas para animar viento
   let treeCanopies = null;
   let treeBasePositions = null;
 
@@ -428,7 +430,7 @@
   (function buildings() {
     const dirt = std(0xb5a687, { map: noiseTexture([190, 170, 140], 40, 128, 10, 4) });
     addBox(BUILD_ZONE[1] - BUILD_ZONE[0], 0.1, 6, dirt, (BUILD_ZONE[0] + BUILD_ZONE[1]) / 2, 0.05, 16);
-    const beige = std(0xd9c39d), beige2 = std(0xcdb58c), dark = std(0x2b2d33, { roughness: 0.4 });
+    const beige = std(0xd9c39d), beige2 = std(0xcdb58c), dark = std(0x2b2d33);
     [[20, 34, 19, 30, 7.2], [36, 50, 19.5, 29, 6.4], [52, 64, 19, 28, 7.6]].forEach((b, i) => {
       const [x0, x1, z0, z1, h] = b;
       const w = x1 - x0, d = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
@@ -447,7 +449,7 @@
     addBox(fenceLen, 0.6, 0.3, std(0xcfcac2), fx, 0.3, 14.2, { cast: true });
     const nBars = Math.floor(fenceLen / 0.18);
     const barGeo = new THREE.BoxGeometry(0.06, 1.9, 0.06);
-    const bars = new THREE.InstancedMesh(barGeo, std(0x2e4fa6, { roughness: 0.5 }), nBars);
+    const bars = new THREE.InstancedMesh(barGeo, std(0x2e4fa6), nBars);
     const m = new THREE.Matrix4();
     for (let i = 0; i < nBars; i++) { m.makeTranslation(FENCE_ZONE[0] + i * 0.18, 1.55, 14.2); bars.setMatrixAt(i, m); }
     bars.castShadow = true;
@@ -465,9 +467,9 @@
     }
   })();
 
-  // Señales y paradero (sin las 2 personas estáticas; ahora son peatones animados)
+  // Señales y paradero
   (function signs() {
-    const post = std(0xa9adb3, { metalness: 0.5, roughness: 0.4 });
+    const post = std(0xa9adb3);
     addBox(0.08, 3.0, 0.08, post, -62, 1.6, 12.2, { cast: true });
     addBox(0.08, 0.95, 0.75, std(0x1f5fd6), -62, 2.75, 12.2, { cast: true });
     addBox(0.09, 0.32, 0.55, std(0xf2f2f2), -62, 2.15, 12.2);
@@ -492,7 +494,7 @@
   })();
 
   // ---------------------------------------------------------------------------
-  // Postes de la red eléctrica
+  // Postes de red eléctrica
   // ---------------------------------------------------------------------------
   (function utilityPoles() {
     const mat = std(0xa7a49c);
@@ -510,7 +512,7 @@
         addBox(0.14, 0.14, 2.4, armMat, x, 11.4, z, { cast: true });
         addBox(0.12, 0.12, 1.6, armMat, x, 10.3, z, { cast: true });
         if (side === 0 && i % 3 === 1) {
-          const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 1.1, 12), std(0x7d8086, { metalness: 0.4 }));
+          const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 1.1, 12), std(0x7d8086));
           tr.position.set(x + 0.45, 8.6, z);
           tr.castShadow = true;
           scene.add(tr);
@@ -576,17 +578,14 @@
   })();
 
   // ---------------------------------------------------------------------------
-  // Peatones animados (NUEVO)
+  // Peatones (SOLO en el andén sur)
   // ---------------------------------------------------------------------------
   const pedestrians = [];
   const pedestrianGroup = new THREE.Group();
   scene.add(pedestrianGroup);
 
-  // Materiales base compartidos
   const pedMats = {
     skin: std(0x6b4a35),
-    skin2: std(0x9a6b4a),
-    skin3: std(0x4a2f22),
     pants: std(0x2a3550),
     pants2: std(0x1d2530),
     pants3: std(0x3a3a3a),
@@ -596,7 +595,6 @@
   const skinPalette = [0x6b4a35, 0x9a6b4a, 0x4a2f22, 0xc89a76];
 
   function makePedestrian(opts) {
-    // opts: { x, z, dir, speed, waiting }
     const g = new THREE.Group();
     const shirtColor = shirtPalette[Math.floor(rand() * shirtPalette.length)];
     const skinColor = skinPalette[Math.floor(rand() * skinPalette.length)];
@@ -604,15 +602,14 @@
     const skinMat = std(skinColor);
     const pantsMat = [pedMats.pants, pedMats.pants2, pedMats.pants3][Math.floor(rand() * 3)];
 
-    const H = rr(1.55, 1.85); // altura total
+    const H = rr(1.55, 1.85);
     const legH = H * 0.45;
     const torsoH = H * 0.32;
     const headR = H * 0.09;
 
-    // Piernas (pivote en la cadera)
     const hipY = legH;
     const legGeo = new THREE.CylinderGeometry(0.07, 0.06, legH, 6);
-    legGeo.translate(0, -legH / 2, 0); // pivote arriba
+    legGeo.translate(0, -legH / 2, 0);
     const legL = new THREE.Mesh(legGeo, pantsMat);
     legL.position.set(0, hipY, 0.08);
     legL.castShadow = true;
@@ -621,7 +618,6 @@
     legR.castShadow = true;
     g.add(legL, legR);
 
-    // Zapatos
     const shoeGeo = new THREE.BoxGeometry(0.16, 0.06, 0.10);
     const shoeL = new THREE.Mesh(shoeGeo, pedMats.shoes);
     shoeL.position.set(0.04, 0.03, 0.08);
@@ -629,13 +625,11 @@
     shoeR.position.set(0.04, 0.03, -0.08);
     g.add(shoeL, shoeR);
 
-    // Torso
     const torso = new THREE.Mesh(new THREE.BoxGeometry(0.16, torsoH, 0.34), shirtMat);
     torso.position.set(0, hipY + torsoH / 2, 0);
     torso.castShadow = true;
     g.add(torso);
 
-    // Brazos (pivote en hombro)
     const armH = H * 0.30;
     const armGeo = new THREE.CylinderGeometry(0.045, 0.04, armH, 5);
     armGeo.translate(0, -armH / 2, 0);
@@ -646,7 +640,6 @@
     armR.position.set(0, hipY + torsoH - 0.02, -0.19);
     armR.castShadow = true;
     g.add(armL, armR);
-    // Manos
     const handGeo = new THREE.SphereGeometry(0.035, 6, 5);
     const handL = new THREE.Mesh(handGeo, skinMat);
     handL.position.y = -armH;
@@ -655,7 +648,6 @@
     handR.position.y = -armH;
     armR.add(handR);
 
-    // Cuello y cabeza
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.05, 6), skinMat);
     neck.position.set(0, hipY + torsoH + 0.03, 0);
     g.add(neck);
@@ -663,7 +655,6 @@
     head.position.set(0, hipY + torsoH + headR + 0.06, 0);
     head.castShadow = true;
     g.add(head);
-    // Cabello
     const hair = new THREE.Mesh(
       new THREE.SphereGeometry(headR * 1.02, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.55),
       std([0x1a1a1a, 0x3a2418, 0x5a3a1a, 0x2a2a2a][Math.floor(rand() * 4)])
@@ -672,7 +663,6 @@
     hair.position.y += 0.005;
     g.add(hair);
 
-    // Bolso/mochila opcional
     if (rand() < 0.35) {
       const bag = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.22), std([0x222222, 0x8b4513, 0x2e4fa6][Math.floor(rand() * 3)]));
       bag.position.set(-0.12, hipY + torsoH / 2, 0);
@@ -682,22 +672,20 @@
 
     g.position.set(opts.x, KERB, opts.z);
     g.rotation.y = opts.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
-    // rotamos para que el cuerpo mire a lo largo de x
-    g.userData.dir = opts.dir;
     pedestrianGroup.add(g);
 
     const rec = {
       group: g, dir: opts.dir, speed: opts.speed, waiting: !!opts.waiting,
       legL, legR, armL, armR, shoeL, shoeR,
       phase: rr(0, Math.PI * 2), x: opts.x, z: opts.z, H,
-      baseRotY: opts.dir > 0 ? Math.PI / 2 : -Math.PI / 2,
     };
     pedestrians.push(rec);
     return rec;
   }
 
   (function initPedestrians() {
-    // Caminantes en el andén sur (z ≈ 11.5–12.5), cerca de la cámara
+    // Andén sur: z entre 11.2 y 12.6 (sobre el andén, nunca en la calzada).
+    // Caminantes
     const southZ = [11.4, 11.9, 12.4];
     for (let i = 0; i < 9; i++) {
       const dir = rand() < 0.5 ? 1 : -1;
@@ -709,28 +697,17 @@
         waiting: false,
       });
     }
-    // Caminantes en el andén norte (z ≈ -11.5)
-    for (let i = 0; i < 6; i++) {
-      const dir = rand() < 0.5 ? 1 : -1;
-      makePedestrian({
-        x: rr(-SAMPLE_HALF, SAMPLE_HALF),
-        z: -11.6 + rr(-0.4, 0.4),
-        dir,
-        speed: rr(0.9, 1.5),
-        waiting: false,
-      });
-    }
-    // Personas esperando en el paradero (x ≈ -62)
+    // Esperando en el paradero (x ≈ -62, sobre el andén)
     for (let i = 0; i < 3; i++) {
       makePedestrian({
         x: -62 + rr(-1.5, 1.5),
-        z: 12.5 + rr(-0.3, 0.3),
+        z: 12.4 + rr(-0.3, 0.3),
         dir: 1,
         speed: 0,
         waiting: true,
       });
     }
-    // Personas esperando junto a la reja azul (x ≈ -13)
+    // Esperando junto a la reja azul (x ≈ -13, sobre el andén)
     for (let i = 0; i < 2; i++) {
       makePedestrian({
         x: -13 + rr(-1, 1),
@@ -740,37 +717,22 @@
         waiting: true,
       });
     }
-    // Algunos cruzando cerca del paso peatonal (x ≈ -12)
-    for (let i = 0; i < 3; i++) {
-      makePedestrian({
-        x: rr(-14, -10),
-        z: rr(4, 9),
-        dir: rand() < 0.5 ? 1 : -1,
-        speed: rr(0.7, 1.1),
-        waiting: false,
-      });
-    }
   })();
 
   function updatePedestrians(dt, time) {
     if (!params.pedestrians) return;
     pedestrians.forEach(p => {
       if (p.waiting) {
-        // Pequeño balanceo de espera
         p.group.position.y = KERB + Math.sin(time * 1.5 + p.phase) * 0.005;
-        // Brazo ligeramente relajado
         p.armL.rotation.x = Math.sin(time * 0.8 + p.phase) * 0.05;
         p.armR.rotation.x = -Math.sin(time * 0.8 + p.phase) * 0.05;
         return;
       }
-      // Movimiento
       p.x += p.dir * p.speed * dt;
-      // Loop dentro de la muestra
       if (p.x > SAMPLE_HALF + 2) { p.x = -SAMPLE_HALF - 2; }
       if (p.x < -SAMPLE_HALF - 2) { p.x = SAMPLE_HALF + 2; }
       p.group.position.x = p.x;
 
-      // Animación de caminata
       const stride = p.speed * 4.5;
       const swing = Math.sin(time * stride + p.phase);
       const swing2 = Math.sin(time * stride + p.phase + Math.PI);
@@ -778,22 +740,19 @@
       p.legR.rotation.x = swing2 * 0.55;
       p.armL.rotation.x = swing2 * 0.45;
       p.armR.rotation.x = swing * 0.45;
-      // Movimiento vertical sutil (rebote)
       p.group.position.y = KERB + Math.abs(Math.sin(time * stride + p.phase)) * 0.03;
-      // Zapatos siguen la pierna (ya son hijos del grupo, no de la pierna, así que los movemos)
       p.shoeL.position.x = 0.04 + Math.sin(p.legL.rotation.x) * 0.08;
       p.shoeL.position.y = 0.03 + Math.cos(p.legL.rotation.x) * 0.02;
       p.shoeR.position.x = 0.04 + Math.sin(p.legR.rotation.x) * 0.08;
       p.shoeR.position.y = 0.03 + Math.cos(p.legR.rotation.x) * 0.02;
 
-      // Orientación según dirección (suave)
       const targetRot = p.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
       p.group.rotation.y = damp(p.group.rotation.y, targetRot, 6, dt);
     });
   }
 
   // ---------------------------------------------------------------------------
-  // Luminarias
+  // Luminarias (solo existentes)
   // ---------------------------------------------------------------------------
   const coneMaterialProto = new THREE.ShaderMaterial({
     uniforms: { color: { value: new THREE.Color(1, 1, 1) }, opacity: { value: 0 }, uH: { value: 10 } },
@@ -816,8 +775,8 @@
 
   const poleMats = {
     concrete: std(0xb3b0a8),
-    steel: std(0x9aa1a9, { metalness: 0.6, roughness: 0.35 }),
-    head: std(0x6f757d, { metalness: 0.5, roughness: 0.4 }),
+    steel: std(0x9aa1a9),
+    head: std(0x6f757d),
   };
 
   const luminaires = [];
@@ -865,7 +824,6 @@
     recs.marker = ring;
   }
 
-  // Pool de luz en el suelo (NUEVO)
   function makeLightPool(parent, x, z, recs) {
     const mat = new THREE.MeshBasicMaterial({
       map: poolTex, color: 0xffffff, transparent: true, opacity: 0,
@@ -882,54 +840,32 @@
   function buildLuminaire(def, H, prevCur) {
     const group = new THREE.Group();
     const rec = Object.assign({}, def, { group, heads: [], cones: [], H });
-    const kindColor = COLORS[def.kind];
+    // color del marcador según estado
+    const kindColor = def.status === 'fault' ? COLORS.fault : def.status === 'dim' ? COLORS.dim : COLORS.ok;
 
-    if (def.kind === 'new') {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.15, H, 10), poleMats.steel);
-      pole.position.y = H / 2 + KERB;
-      pole.castShadow = true;
-      group.add(pole);
-      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, NEW_ARM, 8), poleMats.steel);
-      arm.rotation.x = Math.PI / 2 - 0.15;
-      arm.position.set(0, H + KERB - 0.05, -NEW_ARM / 2);
+    // Poste del separador con brazo doble (todas son existentes)
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, H, 8), poleMats.concrete);
+    pole.position.y = H / 2 + 0.22;
+    pole.castShadow = true;
+    group.add(pole);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.5, 12), new THREE.MeshBasicMaterial({ color: kindColor }));
+    band.position.y = 2.6;
+    group.add(band);
+    [-1, 1].forEach(s => {
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, MED_ARM, 8), poleMats.steel);
+      arm.rotation.x = Math.PI / 2 + s * 0.15;
+      arm.position.set(0, H + 0.22 - 0.05, s * MED_ARM / 2);
       group.add(arm);
-      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.5, 12), new THREE.MeshBasicMaterial({ color: kindColor }));
-      band.position.y = 2.6;
-      group.add(band);
-      makeHead(group, 0, H + KERB + 0.1, -NEW_ARM, 0, 0.75, rec);
-      rec.heads[0].mesh.rotation.y = Math.PI / 2;
-      makeCone(group, 0, H + KERB, -NEW_ARM - 0.4, H * 0.62, rec);
-      makeLightPool(group, 0, -NEW_ARM - 0.4, rec);
-      rec.lightLocal = new THREE.Vector3(0, H + KERB, -NEW_ARM);
-      rec.targetLocal = new THREE.Vector3(0, 0, -NEW_ARM - 1.4);
-      rec.angle = 1.12;
-      group.position.z = NEW_POLE_Z;
-      pickables.push(pole, rec.heads[0].mesh);
-      pole.userData.lum = rec; rec.heads[0].mesh.userData.lum = rec;
-    } else {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, H, 8), poleMats.concrete);
-      pole.position.y = H / 2 + 0.22;
-      pole.castShadow = true;
-      group.add(pole);
-      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.5, 12), new THREE.MeshBasicMaterial({ color: kindColor }));
-      band.position.y = 2.6;
-      group.add(band);
-      [-1, 1].forEach(s => {
-        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, MED_ARM, 8), poleMats.steel);
-        arm.rotation.x = Math.PI / 2 + s * 0.15;
-        arm.position.set(0, H + 0.22 - 0.05, s * MED_ARM / 2);
-        group.add(arm);
-        makeHead(group, 0, H + 0.32, s * MED_ARM, Math.PI / 2, 0.75, rec);
-        makeCone(group, 0, H + 0.22, s * (MED_ARM + 0.6), H * 0.62, rec);
-        makeLightPool(group, 0, s * (MED_ARM + 0.6), rec);
-      });
-      rec.lightLocal = new THREE.Vector3(0, H + 0.22, 0);
-      rec.targetLocal = new THREE.Vector3(0, 0, 0);
-      rec.angle = 1.25;
-      pickables.push(pole);
-      pole.userData.lum = rec;
-      rec.heads.forEach(h => { pickables.push(h.mesh); h.mesh.userData.lum = rec; });
-    }
+      makeHead(group, 0, H + 0.32, s * MED_ARM, Math.PI / 2, 0.75, rec);
+      makeCone(group, 0, H + 0.22, s * (MED_ARM + 0.6), H * 0.62, rec);
+      makeLightPool(group, 0, s * (MED_ARM + 0.6), rec);
+    });
+    rec.lightLocal = new THREE.Vector3(0, H + 0.22, 0);
+    rec.targetLocal = new THREE.Vector3(0, 0, 0);
+    rec.angle = 1.25;
+    pickables.push(pole);
+    pole.userData.lum = rec;
+    rec.heads.forEach(h => { pickables.push(h.mesh); h.mesh.userData.lum = rec; });
 
     makeMarker(group, kindColor, rec);
 
@@ -943,49 +879,17 @@
       size: 42, scale: 1.25, color: '#ffffff',
       bg: 'rgba(12,18,32,0.82)', border: '#' + new THREE.Color(kindColor).getHexString(),
     });
-    label.position.set(0, H + 2.2, def.kind === 'new' ? -1 : 0);
+    label.position.set(0, H + 2.2, 0);
     group.add(label);
     rec.label = label;
 
-    if (def.kind === 'relocated') {
-      const dx = def.xAfter - def.x;
-      const curve = new THREE.QuadraticBezierCurve3(
-        new THREE.Vector3(def.x, H + 1, 0),
-        new THREE.Vector3(def.x + dx / 2, H + 9, 0),
-        new THREE.Vector3(def.xAfter, H + 1, 0)
-      );
-      const path = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(curve.getPoints(48)),
-        new THREE.LineDashedMaterial({ color: COLORS.relocated, dashSize: 1.2, gapSize: 0.8, transparent: true, opacity: 0, fog: false })
-      );
-      path.computeLineDistances();
-      luminaireRoot.add(path);
-      rec.path = path;
-      const ghost = new THREE.Mesh(
-        new THREE.RingGeometry(0.9, 1.35, 40),
-        new THREE.MeshBasicMaterial({ color: COLORS.relocated, transparent: true, opacity: 0, depthWrite: false, fog: false, side: THREE.DoubleSide })
-      );
-      ghost.rotation.x = -Math.PI / 2;
-      ghost.position.set(def.x, 0.32, 0);
-      luminaireRoot.add(ghost);
-      rec.ghost = ghost;
-    }
-
     const t = targetFor(rec);
-    rec.cur = prevCur ? Object.assign({}, prevCur) : { x: t.x, show: t.show, f: t.f, colorT: t.colorT };
-    group.position.x = rec.cur.x;
+    rec.cur = prevCur ? Object.assign({}, prevCur) : { f: t.f, colorT: t.colorT };
+    group.position.x = rec.x;
+    group.position.z = 0;
     luminaireRoot.add(group);
     luminaires.push(rec);
     return rec;
-  }
-
-  function newPositions() {
-    const usable = 150;
-    const n = Math.floor(usable / params.spacing) + 1;
-    const start = -((n - 1) * params.spacing) / 2;
-    const xs = [];
-    for (let i = 0; i < n; i++) xs.push(start + i * params.spacing);
-    return xs;
   }
 
   function disposeTree(obj) {
@@ -1010,28 +914,35 @@
       disposeTree(c);
     }
     const H = params.mountH;
-    MEDIAN_DEF.forEach(d => buildLuminaire(d, H, prev[d.id]));
-    newPositions().forEach((x, i) => {
-      const id = 'N-' + String(i + 1).padStart(2, '0');
-      buildLuminaire({ id, kind: 'new', x, xAfter: x, before: 0 }, H, prev[id] ? Object.assign({}, prev[id], { x }) : null);
-    });
+    EXISTING_DEF.forEach(d => buildLuminaire(d, H, prev[d.id]));
     updateCounts();
     applyLayerVisibility();
     heatDirty = true;
   }
 
+  // ANTES: cada una con su estado (ok=1, dim≈0.35, fault=0), color ámbar.
+  // DESPUÉS: todas a f=1 y color LED. La posición x NUNCA cambia.
   function targetFor(l) {
-    const after = state.after;
-    if (l.kind === 'new') return { x: l.x, show: after ? 1 : 0, f: after ? 1 : 0, colorT: 1 };
-    if (l.kind === 'relocated') return { x: after ? l.xAfter : l.x, show: 1, f: 1, colorT: after ? 1 : 0 };
-    return { x: l.x, show: 1, f: after ? 1 : l.before, colorT: after ? 1 : 0 };
+    if (state.after) {
+      return { f: 1, colorT: 1 };
+    }
+    const f = l.status === 'ok' ? 1 : l.status === 'dim' ? 0.35 : 0;
+    return { f, colorT: 0 };
   }
 
   function updateCounts() {
-    const n = luminaires.filter(l => l.kind === 'new').length;
-    document.getElementById('cntNew').textContent = n;
-    document.getElementById('cntReloc').textContent = luminaires.filter(l => l.kind === 'relocated').length;
-    document.getElementById('cntExist').textContent = luminaires.filter(l => l.kind === 'existing').length;
+    let fault = 0, dim = 0, ok = 0;
+    luminaires.forEach(l => {
+      if (l.status === 'fault') fault++;
+      else if (l.status === 'dim') dim++;
+      else ok++;
+    });
+    const cf = document.getElementById('cntFault');
+    const cd = document.getElementById('cntDim');
+    const co = document.getElementById('cntOk');
+    if (cf) cf.textContent = fault;
+    if (cd) cd.textContent = dim;
+    if (co) co.textContent = ok;
   }
 
   // ---------------------------------------------------------------------------
@@ -1075,10 +986,10 @@
     const src = [];
     luminaires.forEach(l => {
       const s = useTarget ? targetFor(l) : l.cur;
-      const w = s.f * s.show;
+      const w = s.f;
       if (w <= 0.001) return;
-      const gx = s.x, gz = l.group.position.z;
-      l.heads.forEach(h => src.push([gx + h.local.x, h.local.y, gz + h.local.z, w / l.heads.length * (l.kind === 'new' ? 1 : 2)]));
+      const gz = l.group.position.z;
+      l.heads.forEach(h => src.push([l.x + h.local.x, h.local.y, gz + h.local.z, w / l.heads.length * 2]));
     });
     return src;
   }
@@ -1128,9 +1039,9 @@
     for (let i = 0; i < 10; i++) {
       const [z, dir] = lanes[i % 4];
       const g = new THREE.Group();
-      const bodyMat = std(palette[i % palette.length], { roughness: 0.4, metalness: 0.3 });
+      const bodyMat = std(palette[i % palette.length]);
       addBox(4.2, 0.75, 1.8, bodyMat, 0, 0.6, 0, { cast: true, parent: g });
-      addBox(2.2, 0.6, 1.6, std(0x1d2430, { roughness: 0.2, metalness: 0.5 }), -0.2, 1.25, 0, { cast: true, parent: g });
+      addBox(2.2, 0.6, 1.6, std(0x1d2430), -0.2, 1.25, 0, { cast: true, parent: g });
       addBox(3.4, 0.3, 1.7, std(0x111111), 0, 0.2, 0, { parent: g });
       const head = new THREE.MeshBasicMaterial({ color: 0x777777 });
       const tail = new THREE.MeshBasicMaterial({ color: 0x551111 });
@@ -1234,7 +1145,7 @@
   rngH.addEventListener('input', () => { document.getElementById('valH').textContent = rngH.value + ' m'; });
   rngH.addEventListener('change', () => { params.mountH = parseFloat(rngH.value); rebuildLuminaires(); computeHeatRef(); });
   rngS.addEventListener('input', () => { document.getElementById('valS').textContent = rngS.value + ' m'; });
-  rngS.addEventListener('change', () => { params.spacing = parseFloat(rngS.value); rebuildLuminaires(); computeHeatRef(); });
+  rngS.addEventListener('change', () => { params.spacing = parseFloat(rngS.value); /* no se usa para existentes */ });
   rngP.addEventListener('input', () => { params.power = rngP.value / 100; document.getElementById('valP').textContent = rngP.value + ' %'; });
 
   document.querySelectorAll('[data-collapse]').forEach(btn => btn.addEventListener('click', () => {
@@ -1268,36 +1179,31 @@
     else if (k === 'c') flip('cones');
     else if (k === 'm') flip('heat');
     else if (k === 'l') flip('labels');
-    else if (k === 'p') flip('pedestrians');   // NUEVO atajo
+    else if (k === 'p') flip('pedestrians');
     else if (k === 'h') toggleUi();
     else if (k === 'escape') hideTooltip();
   });
 
   const tooltip = document.getElementById('tooltip');
   function hideTooltip() { tooltip.classList.add('hidden'); }
-  function kindName(k) { return k === 'new' ? 'Luminaria nueva' : k === 'relocated' ? 'Luminaria reubicada' : 'Luminaria existente'; }
+  function statusName(s) { return s === 'fault' ? 'en falla' : s === 'dim' ? 'baja intensidad' : 'OK'; }
   function showInfo(l, px, py) {
-    const col = '#' + new THREE.Color(COLORS[l.kind]).getHexString();
+    const col = '#' + new THREE.Color(l.status === 'fault' ? COLORS.fault : l.status === 'dim' ? COLORS.dim : COLORS.ok).getHexString();
     const pos = x => Math.round(x + SAMPLE_HALF) + ' m';
-    let body = '';
-    if (l.kind === 'new') {
-      body = '<p>Luminaria LED nueva con su poste (ACT.1.2: 20 en el proyecto; ACT.3.1: LED de bajo consumo).</p>' +
-        '<p>Posición en la muestra: ' + pos(l.x) + ' desde el inicio, andén sur.</p>' +
-        '<p class="muted">Forma parte de las <b>20 luminarias planificadas en el Excel</b>. No se agregan luminarias fuera del alcance del proyecto.</p>' +
-        '<p class="muted">Potencia, flujo luminoso y temperatura de color: <b>no especificados en el Excel</b>.</p>' +
-        '<p>Escenario actual: ' + (state.after ? 'instalada' : 'aún no existe') + '.</p>';
-    } else if (l.kind === 'relocated') {
-      body = '<p>Luminaria existente reubicada hacia un sector con déficit de cobertura (ACT.1.3: 8 en el proyecto).</p>' +
-        '<p>Posición: ' + pos(l.x) + ' → ' + pos(l.xAfter) + ' (separador central). <span class="muted">Ubicación ilustrativa.</span></p>' +
-        '<p>Escenario actual: ' + (state.after ? 'reubicada, con tecnología LED' : 'en su posición original') + '.</p>';
+    let body = '<p>Luminaria existente del separador central. <b>No se reubica ni se agrega</b>; solo se corrige su funcionamiento.</p>' +
+      '<p>Posición en la muestra: ' + pos(l.x) + '.</p>';
+    if (l.status === 'fault') {
+      body += '<p><b>ANTES:</b> apagada / en falla. ' + (l.note || '') + '</p>' +
+        '<p><b>DESPUÉS:</b> se enciende y queda operativa con LED.</p>';
+    } else if (l.status === 'dim') {
+      body += '<p><b>ANTES:</b> encendida con baja intensidad. ' + (l.note || '') + '</p>' +
+        '<p><b>DESPUÉS:</b> se recupera a plena intensidad y se cambia a LED.</p>';
     } else {
-      body = '<p>Luminaria existente del separador central.</p>' +
-        '<p>Posición en la muestra: ' + pos(l.x) + '.</p>' +
-        '<p>ANTES: ' + (l.note || 'en funcionamiento') + '.</p>' +
-        '<p>DESPUÉS: incluida en el mantenimiento preventivo y correctivo (Componente 2; meta ≥ 95 % en funcionamiento).</p>';
+      body += '<p><b>ANTES:</b> funcionando correctamente (tecnología ámbar).</p>' +
+        '<p><b>DESPUÉS:</b> se mantiene operativa y se cambia a LED de bajo consumo.</p>';
     }
     body += '<p class="muted">Altura de montaje modelada: ' + params.mountH + ' m (aproximación editable).</p>';
-    tooltip.innerHTML = '<button class="close" aria-label="Cerrar">×</button><h4><i class="dot" style="background:' + col + '"></i>' + l.id + ' · ' + kindName(l.kind) + '</h4>' + body;
+    tooltip.innerHTML = '<button class="close" aria-label="Cerrar">×</button><h4><i class="dot" style="background:' + col + '"></i>' + l.id + ' · existente (' + statusName(l.status) + ')</h4>' + body;
     tooltip.querySelector('.close').addEventListener('click', hideTooltip);
     tooltip.classList.remove('hidden');
     const w = 300, h = tooltip.offsetHeight;
@@ -1363,28 +1269,21 @@
     let moving = false;
     luminaires.forEach(l => {
       const t = targetFor(l), c = l.cur;
-      const before = [c.x, c.show, c.f, c.colorT];
-      c.x = damp(c.x, t.x, 1.6, dt);
-      c.show = damp(c.show, t.show, 2.4, dt);
+      const beforeF = c.f;
       c.f = damp(c.f, t.f, 2.4, dt);
       c.colorT = damp(c.colorT, t.colorT, 2.0, dt);
-      if (Math.abs(c.x - before[0]) + Math.abs(c.show - before[1]) + Math.abs(c.f - before[2]) > 1e-3) moving = true;
+      if (Math.abs(c.f - beforeF) > 1e-3) moving = true;
 
-      l.group.position.x = c.x;
-      const hidden = c.show < 0.01;
-      l.group.visible = !hidden;
-      l.group.position.y = -(1 - c.show) * (l.H + 1.5);
-      l.marker.material.opacity = 0.95 * c.show;
-      l.marker.position.y = 0.32 + (1 - c.show) * (l.H + 1.5);
+      // Parpadeo sutil para las que están en falla en ANTES
+      let flicker = 1;
+      if (!state.after && l.status === 'fault') {
+        const tt = elapsed * 8 + l.x * 0.3;
+        // parpadeo tenue: se enciende muy poco a ratos
+        flicker = 0.85 + 0.15 * Math.sin(tt) * Math.sin(tt * 1.7);
+      }
 
       const lampColor = tmpC.copy(COLORS.amber).lerp(COLORS.led, c.colorT);
-      // Parpadeo sutil para luminarias existentes en falla (before = 0)
-      let flicker = 1;
-      if (l.kind === 'existing' && l.before < 0.05 && !state.after) {
-        const tt = elapsed * 8 + l.x * 0.3;
-        flicker = 0.75 + 0.25 * Math.sin(tt) * Math.sin(tt * 1.7);
-      }
-      const on = c.f * c.show * flicker;
+      const on = c.f * flicker;
       l.light.color.copy(lampColor);
       l.light.intensity = BASE_SPOT * on * nightT * params.power;
       l.heads.forEach(h => {
@@ -1397,18 +1296,10 @@
         cone.material.uniforms.color.value.copy(lampColor);
         cone.material.uniforms.opacity.value = 0.32 * on * nightT * Math.min(1.4, params.power);
       });
-      // Pool de luz en el suelo
       if (l.pool) {
         l.pool.material.color.copy(lampColor);
         l.pool.material.opacity = 0.35 * on * nightT * Math.min(1.5, params.power);
         l.pool.visible = params.cones && on * nightT > 0.02;
-      }
-      if (l.path) {
-        const a = params.markers ? Math.max(0, (c.colorT - 0.05)) : 0;
-        l.path.material.opacity = a;
-        l.path.visible = a > 0.01;
-        l.ghost.material.opacity = 0.7 * a;
-        l.ghost.visible = a > 0.01;
       }
     });
     return moving;
@@ -1425,8 +1316,6 @@
     });
   }
 
-  // Balanceo de árboles por viento (NUEVO)
-  const windMatrix = new THREE.Matrix4();
   const windQuat = new THREE.Quaternion();
   const windEuler = new THREE.Euler();
   function updateTrees(time) {
@@ -1502,7 +1391,6 @@
   camera.position.fromArray(VIEWS.aerial.pos);
   setScenario(false);
   setNight(false);
-  void PROJECT;
 
   window.maqueta = { state, params, setScenario, setNight, goToView, luminaires, pedestrians, renderer, scene, camera };
 
