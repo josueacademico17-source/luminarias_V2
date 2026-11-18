@@ -41,12 +41,17 @@
 
       <details open>
         <summary>Alcance de la muestra</summary>
-        <p>Segmento ilustrativo de <b>≈180 m</b>. Se modelan <b>solo las luminarias existentes</b> del separador central, con una distribución aproximada y estados de funcionamiento ilustrativos.</p>
+        <p>Segmento ilustrativo de <b>≈180 m</b>. Se modelan <b>solo luminarias existentes</b>, en tres zonas:</p>
+        <ul class="facts">
+          <li><b>Separador central</b> (eje de la vía): 7 luminarias.</li>
+          <li><b>Andén sur</b> (extremo derecho de la sección): 7 luminarias.</li>
+          <li><b>Andén norte</b> (extremo izquierdo de la sección): 7 luminarias.</li>
+        </ul>
         <p><b>No se agregan ni se reubican luminarias.</b> El proyecto consiste en <b>mejorar y poner en servicio</b> las que ya están instaladas.</p>
         <div class="stats">
-          <div><span id="cntFault">3</span><small>en falla (no encienden)</small></div>
-          <div><span id="cntDim">3</span><small>con baja intensidad</small></div>
-          <div><span id="cntOk">7</span><small>funcionando OK</small></div>
+          <div><span id="cntFault">0</span><small>en falla (no encienden)</small></div>
+          <div><span id="cntDim">0</span><small>con baja intensidad</small></div>
+          <div><span id="cntOk">0</span><small>funcionando OK</small></div>
         </div>
       </details>
 
@@ -56,7 +61,7 @@
           <li><b>Luminarias apagadas / en falla</b> → se encienden y quedan operativas.</li>
           <li><b>Luminarias con baja intensidad</b> (lámpara degradada, balasto, suciedad) → se recuperan a plena intensidad.</li>
           <li><b>Tecnología</b>: se reemplaza la fuente por <b>LED de bajo consumo</b> (color blanco), lo que también reduce el consumo del tramo.</li>
-          <li><b>Mantenimiento preventivo y correctivo</b> de todas las existentes.</li>
+          <li><b>Mantenimiento preventivo y correctivo</b> de todas las existentes, en las tres zonas.</li>
           <li><b>Distribución</b>: se conserva la posición de cada poste; no se agregan ni se mueven.</li>
         </ul>
         <p class="muted">Los estados (falla, baja intensidad, OK) y sus posiciones son <b>ilustrativos</b>. El estado real sale del diagnóstico en campo.</p>
@@ -78,6 +83,7 @@
         <ul class="facts">
           <li><b>Peatones animados solo en el andén sur</b>: caminan y esperan junto al paradero y la reja azul. Ninguno invade la calzada ni el separador.</li>
           <li><b>Sin luminarias nuevas ni reubicadas</b>: solo se modelan las existentes y se corrigen en el escenario DESPUÉS.</li>
+          <li><b>Luminarias en 3 zonas</b>: separador central, andén sur y andén norte, en igual proporción (7 + 7 + 7).</li>
           <li>Estados realistas: apagadas, baja intensidad y OK, con parpadeo sutil en las que fallan.</li>
           <li><b>Pool de luz</b> en el suelo bajo cada luminaria (más realista de noche).</li>
           <li><b>Balanceo de árboles</b> leve por viento.</li>
@@ -89,7 +95,7 @@
         <summary>Aproximaciones y limitaciones</summary>
         <ul class="facts warn">
           <li>El Excel <b>no especifica</b> potencia, flujo luminoso, temperatura de color ni altura de montaje de las existentes.</li>
-          <li>La <b>distribución de las existentes</b> es aproximada: se asume una interdistancia regular del separador central, con variaciones menores.</li>
+          <li>La <b>distribución de las existentes</b> es aproximada: se asume una interdistancia regular en cada zona, con variaciones menores.</li>
           <li>Los <b>estados</b> (falla / baja intensidad / OK) son ilustrativos. El estado real sale del diagnóstico (ACT.2.1).</li>
           <li>Ámbar = tecnología actual supuesta; blanco = LED. El color real no está en el Excel.</li>
           <li>La luz es una <b>simulación visual</b>, no un cálculo fotométrico certificado.</li>
@@ -131,6 +137,7 @@
         <li><i class="swatch amber"></i>Luz actual (ámbar, supuesta)</li>
         <li><i class="swatch led"></i>Luz LED corregida</li>
       </ul>
+      <p class="muted">Las luminarias existentes se distribuyen en <b>separador central</b>, <b>andén sur</b> y <b>andén norte</b>.</p>
 
       <h3>Capas</h3>
       <label class="switch"><input type="checkbox" id="tglCones" checked /><span></span>Conos de luz</label>
