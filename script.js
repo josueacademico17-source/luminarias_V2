@@ -6,12 +6,13 @@
  *   y = altura
  *   z = sección transversal (+z = andén sur, el de las fotos)
  *
- * ALCANCE v3:
- *   - Solo luminarias EXISTENTES del separador central.
+ * ALCANCE v4:
+ *   - Solo luminarias EXISTENTES en 3 zonas: separador central, andén sur, andén norte.
+ *   - 7 en el centro + 7 en el andén sur + 7 en el andén norte = 21 existentes.
  *   - NO se agregan ni se reubican luminarias.
  *   - ANTES: cada existente tiene un estado (OK / baja intensidad / en falla).
  *   - DESPUÉS: esas mismas luminarias se corrigen (encienden y/o suben a LED).
- *   - Peatones SOLO en el andén sur (caminando o esperando).
+ *   - Peatones SOLO en el andén sur.
  */
 (function () {
   'use strict';
@@ -43,6 +44,7 @@
   };
   const KERB = 0.16;
   const MED_ARM = 1.8;
+  const SIDE_ARM = 1.6;
 
   const params = {
     mountH: 10,
@@ -58,35 +60,57 @@
 
   const state = { after: false, night: false, view: 'aerial' };
 
-  // Luminarias EXISTENTES del separador central.
-  // status: 'ok' | 'dim' | 'fault'
-  //   ok    → enciende a plena intensidad (pero con tecnología ámbar en ANTES)
-  //   dim   → enciende con baja intensidad
-  //   fault → no enciende (apagada / en falla)
-  // Las posiciones son ilustrativas, distribuidas de forma aproximadamente regular
-  // a lo largo de los ~180 m de la muestra. NO se reubican en DESPUÉS.
-  const EXISTING_DEF = [
-    { id: 'E-01', x: -84, status: 'ok' },
-    { id: 'E-02', x: -70, status: 'dim',  note: 'Baja intensidad (lámpara degradada)' },
-    { id: 'E-03', x: -56, status: 'ok' },
-    { id: 'E-04', x: -42, status: 'fault', note: 'Apagada / en falla' },
-    { id: 'E-05', x: -28, status: 'ok' },
-    { id: 'E-06', x: -14, status: 'dim',  note: 'Baja intensidad (balasto)' },
-    { id: 'E-07', x:   0, status: 'ok' },
-    { id: 'E-08', x:  14, status: 'ok' },
-    { id: 'E-09', x:  28, status: 'fault', note: 'Apagada / en falla' },
-    { id: 'E-10', x:  42, status: 'ok' },
-    { id: 'E-11', x:  56, status: 'dim',  note: 'Baja intensidad (suciedad del difusor)' },
-    { id: 'E-12', x:  70, status: 'ok' },
-    { id: 'E-13', x:  84, status: 'fault', note: 'Apagada / en falla' },
+  // ---------------------------------------------------------------------------
+  // Luminarias EXISTENTES en 3 zonas
+  //   zone: 'center' | 'south' | 'north'
+  //   status: 'ok' | 'dim' | 'fault'
+  //   z: posición transversal en metros (según XS)
+  // ---------------------------------------------------------------------------
+  const CENTER_Z = 0;          // eje del separador
+  const SOUTH_Z = 10.6;        // borde del andén sur, junto al sardinel
+  const NORTH_Z = -10.6;       // borde del andén norte, junto al sardinel
+
+  // 7 en el centro
+  const CENTER_DEF = [
+    { id: 'C-01', zone: 'center', x: -84, z: CENTER_Z, status: 'ok' },
+    { id: 'C-02', zone: 'center', x: -56, z: CENTER_Z, status: 'dim',  note: 'Baja intensidad (lámpara degradada)' },
+    { id: 'C-03', zone: 'center', x: -28, z: CENTER_Z, status: 'ok' },
+    { id: 'C-04', zone: 'center', x:   0, z: CENTER_Z, status: 'fault', note: 'Apagada / en falla' },
+    { id: 'C-05', zone: 'center', x:  28, z: CENTER_Z, status: 'ok' },
+    { id: 'C-06', zone: 'center', x:  56, z: CENTER_Z, status: 'dim',  note: 'Baja intensidad (balasto)' },
+    { id: 'C-07', zone: 'center', x:  84, z: CENTER_Z, status: 'ok' },
   ];
+
+  // 7 en el andén sur
+  const SOUTH_DEF = [
+    { id: 'S-01', zone: 'south', x: -84, z: SOUTH_Z, status: 'ok' },
+    { id: 'S-02', zone: 'south', x: -56, z: SOUTH_Z, status: 'ok' },
+    { id: 'S-03', zone: 'south', x: -28, z: SOUTH_Z, status: 'dim',  note: 'Baja intensidad (suciedad del difusor)' },
+    { id: 'S-04', zone: 'south', x:   0, z: SOUTH_Z, status: 'ok' },
+    { id: 'S-05', zone: 'south', x:  28, z: SOUTH_Z, status: 'fault', note: 'Apagada / en falla' },
+    { id: 'S-06', zone: 'south', x:  56, z: SOUTH_Z, status: 'ok' },
+    { id: 'S-07', zone: 'south', x:  84, z: SOUTH_Z, status: 'dim',  note: 'Baja intensidad (lámpara degradada)' },
+  ];
+
+  // 7 en el andén norte
+  const NORTH_DEF = [
+    { id: 'N-01', zone: 'north', x: -84, z: NORTH_Z, status: 'ok' },
+    { id: 'N-02', zone: 'north', x: -56, z: NORTH_Z, status: 'dim',  note: 'Baja intensidad (balasto)' },
+    { id: 'N-03', zone: 'north', x: -28, z: NORTH_Z, status: 'ok' },
+    { id: 'N-04', zone: 'north', x:   0, z: NORTH_Z, status: 'ok' },
+    { id: 'N-05', zone: 'north', x:  28, z: NORTH_Z, status: 'fault', note: 'Apagada / en falla' },
+    { id: 'N-06', zone: 'north', x:  56, z: NORTH_Z, status: 'ok' },
+    { id: 'N-07', zone: 'north', x:  84, z: NORTH_Z, status: 'dim',  note: 'Baja intensidad (suciedad del difusor)' },
+  ];
+
+  const EXISTING_DEF = CENTER_DEF.concat(SOUTH_DEF, NORTH_DEF);
 
   const COLORS = {
     amber: new THREE.Color(0xffa63d),
     led: new THREE.Color(0xeef4ff),
     ok: 0x5aa9ff,
     dim: 0xf59e0b,
-    fault: 0x34d399,   // verde = "a corregir" (queda bien visible)
+    fault: 0x34d399,
     utility: 0x8b8f98,
   };
 
@@ -269,7 +293,7 @@
   ground.receiveShadow = true;
   scene.add(ground);
 
-  const asphaltMat = std(0x55585e, { map: noiseTexture([150, 150, 150], 40, 256, LEN / 6, 1.2), roughness: 0.95 });
+  const asphaltMat = std(0x55585e, { map: noiseTexture([150, 150, 150], 40, 256, LEN / 6, 1.2) });
   addBox(LEN, 0.1, XS.cwS[1] - XS.cwS[0], asphaltMat, 0, 0.0, (XS.cwS[0] + XS.cwS[1]) / 2);
   addBox(LEN, 0.1, XS.cwN[1] - XS.cwN[0], asphaltMat, 0, 0.0, (XS.cwN[0] + XS.cwN[1]) / 2);
 
@@ -684,8 +708,6 @@
   }
 
   (function initPedestrians() {
-    // Andén sur: z entre 11.2 y 12.6 (sobre el andén, nunca en la calzada).
-    // Caminantes
     const southZ = [11.4, 11.9, 12.4];
     for (let i = 0; i < 9; i++) {
       const dir = rand() < 0.5 ? 1 : -1;
@@ -697,7 +719,6 @@
         waiting: false,
       });
     }
-    // Esperando en el paradero (x ≈ -62, sobre el andén)
     for (let i = 0; i < 3; i++) {
       makePedestrian({
         x: -62 + rr(-1.5, 1.5),
@@ -707,7 +728,6 @@
         waiting: true,
       });
     }
-    // Esperando junto a la reja azul (x ≈ -13, sobre el andén)
     for (let i = 0; i < 2; i++) {
       makePedestrian({
         x: -13 + rr(-1, 1),
@@ -752,7 +772,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Luminarias (solo existentes)
+  // Luminarias (solo existentes, en 3 zonas)
   // ---------------------------------------------------------------------------
   const coneMaterialProto = new THREE.ShaderMaterial({
     uniforms: { color: { value: new THREE.Color(1, 1, 1) }, opacity: { value: 0 }, uH: { value: 10 } },
@@ -840,32 +860,56 @@
   function buildLuminaire(def, H, prevCur) {
     const group = new THREE.Group();
     const rec = Object.assign({}, def, { group, heads: [], cones: [], H });
-    // color del marcador según estado
     const kindColor = def.status === 'fault' ? COLORS.fault : def.status === 'dim' ? COLORS.dim : COLORS.ok;
 
-    // Poste del separador con brazo doble (todas son existentes)
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, H, 8), poleMats.concrete);
-    pole.position.y = H / 2 + 0.22;
-    pole.castShadow = true;
-    group.add(pole);
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.5, 12), new THREE.MeshBasicMaterial({ color: kindColor }));
-    band.position.y = 2.6;
-    group.add(band);
-    [-1, 1].forEach(s => {
-      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, MED_ARM, 8), poleMats.steel);
-      arm.rotation.x = Math.PI / 2 + s * 0.15;
-      arm.position.set(0, H + 0.22 - 0.05, s * MED_ARM / 2);
+    if (def.zone === 'center') {
+      // Poste del separador con brazo doble
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, H, 8), poleMats.concrete);
+      pole.position.y = H / 2 + 0.22;
+      pole.castShadow = true;
+      group.add(pole);
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.5, 12), new THREE.MeshBasicMaterial({ color: kindColor }));
+      band.position.y = 2.6;
+      group.add(band);
+      [-1, 1].forEach(s => {
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, MED_ARM, 8), poleMats.steel);
+        arm.rotation.x = Math.PI / 2 + s * 0.15;
+        arm.position.set(0, H + 0.22 - 0.05, s * MED_ARM / 2);
+        group.add(arm);
+        makeHead(group, 0, H + 0.32, s * MED_ARM, Math.PI / 2, 0.75, rec);
+        makeCone(group, 0, H + 0.22, s * (MED_ARM + 0.6), H * 0.62, rec);
+        makeLightPool(group, 0, s * (MED_ARM + 0.6), rec);
+      });
+      rec.lightLocal = new THREE.Vector3(0, H + 0.22, 0);
+      rec.targetLocal = new THREE.Vector3(0, 0, 0);
+      rec.angle = 1.25;
+      pickables.push(pole);
+      pole.userData.lum = rec;
+      rec.heads.forEach(h => { pickables.push(h.mesh); h.mesh.userData.lum = rec; });
+    } else {
+      // Poste de andén (sur o norte) con brazo simple hacia la calzada
+      const isSouth = def.zone === 'south';
+      const armDir = isSouth ? -1 : 1;   // hacia el centro de la vía
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.15, H, 10), poleMats.steel);
+      pole.position.y = H / 2 + KERB;
+      pole.castShadow = true;
+      group.add(pole);
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, SIDE_ARM, 8), poleMats.steel);
+      arm.rotation.x = Math.PI / 2 - 0.15;
+      arm.position.set(0, H + KERB - 0.05, armDir * SIDE_ARM / 2);
       group.add(arm);
-      makeHead(group, 0, H + 0.32, s * MED_ARM, Math.PI / 2, 0.75, rec);
-      makeCone(group, 0, H + 0.22, s * (MED_ARM + 0.6), H * 0.62, rec);
-      makeLightPool(group, 0, s * (MED_ARM + 0.6), rec);
-    });
-    rec.lightLocal = new THREE.Vector3(0, H + 0.22, 0);
-    rec.targetLocal = new THREE.Vector3(0, 0, 0);
-    rec.angle = 1.25;
-    pickables.push(pole);
-    pole.userData.lum = rec;
-    rec.heads.forEach(h => { pickables.push(h.mesh); h.mesh.userData.lum = rec; });
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.5, 12), new THREE.MeshBasicMaterial({ color: kindColor }));
+      band.position.y = 2.6;
+      group.add(band);
+      makeHead(group, 0, H + KERB + 0.1, armDir * SIDE_ARM, Math.PI / 2, 0.75, rec);
+      makeCone(group, 0, H + KERB, armDir * (SIDE_ARM + 0.4), H * 0.62, rec);
+      makeLightPool(group, 0, armDir * (SIDE_ARM + 0.4), rec);
+      rec.lightLocal = new THREE.Vector3(0, H + KERB, armDir * SIDE_ARM);
+      rec.targetLocal = new THREE.Vector3(0, 0, armDir * (SIDE_ARM + 1.4));
+      rec.angle = 1.12;
+      pickables.push(pole, rec.heads[0].mesh);
+      pole.userData.lum = rec; rec.heads[0].mesh.userData.lum = rec;
+    }
 
     makeMarker(group, kindColor, rec);
 
@@ -886,7 +930,7 @@
     const t = targetFor(rec);
     rec.cur = prevCur ? Object.assign({}, prevCur) : { f: t.f, colorT: t.colorT };
     group.position.x = rec.x;
-    group.position.z = 0;
+    group.position.z = rec.z;
     luminaireRoot.add(group);
     luminaires.push(rec);
     return rec;
@@ -920,12 +964,8 @@
     heatDirty = true;
   }
 
-  // ANTES: cada una con su estado (ok=1, dim≈0.35, fault=0), color ámbar.
-  // DESPUÉS: todas a f=1 y color LED. La posición x NUNCA cambia.
   function targetFor(l) {
-    if (state.after) {
-      return { f: 1, colorT: 1 };
-    }
+    if (state.after) return { f: 1, colorT: 1 };
     const f = l.status === 'ok' ? 1 : l.status === 'dim' ? 0.35 : 0;
     return { f, colorT: 0 };
   }
@@ -989,7 +1029,7 @@
       const w = s.f;
       if (w <= 0.001) return;
       const gz = l.group.position.z;
-      l.heads.forEach(h => src.push([l.x + h.local.x, h.local.y, gz + h.local.z, w / l.heads.length * 2]));
+      l.heads.forEach(h => src.push([l.x + h.local.x, h.local.y, gz + h.local.z, w / l.heads.length * (l.zone === 'center' ? 2 : 1)]));
     });
     return src;
   }
@@ -1145,7 +1185,7 @@
   rngH.addEventListener('input', () => { document.getElementById('valH').textContent = rngH.value + ' m'; });
   rngH.addEventListener('change', () => { params.mountH = parseFloat(rngH.value); rebuildLuminaires(); computeHeatRef(); });
   rngS.addEventListener('input', () => { document.getElementById('valS').textContent = rngS.value + ' m'; });
-  rngS.addEventListener('change', () => { params.spacing = parseFloat(rngS.value); /* no se usa para existentes */ });
+  rngS.addEventListener('change', () => { params.spacing = parseFloat(rngS.value); });
   rngP.addEventListener('input', () => { params.power = rngP.value / 100; document.getElementById('valP').textContent = rngP.value + ' %'; });
 
   document.querySelectorAll('[data-collapse]').forEach(btn => btn.addEventListener('click', () => {
@@ -1187,10 +1227,11 @@
   const tooltip = document.getElementById('tooltip');
   function hideTooltip() { tooltip.classList.add('hidden'); }
   function statusName(s) { return s === 'fault' ? 'en falla' : s === 'dim' ? 'baja intensidad' : 'OK'; }
+  function zoneName(z) { return z === 'center' ? 'separador central' : z === 'south' ? 'andén sur' : 'andén norte'; }
   function showInfo(l, px, py) {
     const col = '#' + new THREE.Color(l.status === 'fault' ? COLORS.fault : l.status === 'dim' ? COLORS.dim : COLORS.ok).getHexString();
     const pos = x => Math.round(x + SAMPLE_HALF) + ' m';
-    let body = '<p>Luminaria existente del separador central. <b>No se reubica ni se agrega</b>; solo se corrige su funcionamiento.</p>' +
+    let body = '<p>Luminaria existente en <b>' + zoneName(l.zone) + '</b>. <b>No se reubica ni se agrega</b>; solo se corrige su funcionamiento.</p>' +
       '<p>Posición en la muestra: ' + pos(l.x) + '.</p>';
     if (l.status === 'fault') {
       body += '<p><b>ANTES:</b> apagada / en falla. ' + (l.note || '') + '</p>' +
@@ -1203,7 +1244,7 @@
         '<p><b>DESPUÉS:</b> se mantiene operativa y se cambia a LED de bajo consumo.</p>';
     }
     body += '<p class="muted">Altura de montaje modelada: ' + params.mountH + ' m (aproximación editable).</p>';
-    tooltip.innerHTML = '<button class="close" aria-label="Cerrar">×</button><h4><i class="dot" style="background:' + col + '"></i>' + l.id + ' · existente (' + statusName(l.status) + ')</h4>' + body;
+    tooltip.innerHTML = '<button class="close" aria-label="Cerrar">×</button><h4><i class="dot" style="background:' + col + '"></i>' + l.id + ' · ' + zoneName(l.zone) + ' (' + statusName(l.status) + ')</h4>' + body;
     tooltip.querySelector('.close').addEventListener('click', hideTooltip);
     tooltip.classList.remove('hidden');
     const w = 300, h = tooltip.offsetHeight;
@@ -1274,11 +1315,9 @@
       c.colorT = damp(c.colorT, t.colorT, 2.0, dt);
       if (Math.abs(c.f - beforeF) > 1e-3) moving = true;
 
-      // Parpadeo sutil para las que están en falla en ANTES
       let flicker = 1;
       if (!state.after && l.status === 'fault') {
         const tt = elapsed * 8 + l.x * 0.3;
-        // parpadeo tenue: se enciende muy poco a ratos
         flicker = 0.85 + 0.15 * Math.sin(tt) * Math.sin(tt * 1.7);
       }
 
