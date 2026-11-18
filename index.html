@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Maqueta 3D · Iluminación vía de Ternera</title>
+  <title>Maqueta 3D · Mejoramiento del alumbrado — Vía de Ternera</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -41,56 +41,57 @@
 
       <details open>
         <summary>Alcance de la muestra</summary>
-        <p>Segmento ilustrativo de <b>≈180 m</b>, no el corredor completo. Las luminarias que se ven son una <b>selección coherente</b> del proyecto, <b>no el inventario total</b>.</p>
+        <p>Segmento ilustrativo de <b>≈180 m</b>. Se modelan <b>solo las luminarias existentes</b> del separador central, con una distribución aproximada y estados de funcionamiento ilustrativos.</p>
+        <p><b>No se agregan ni se reubican luminarias.</b> El proyecto consiste en <b>mejorar y poner en servicio</b> las que ya están instaladas.</p>
         <div class="stats">
-          <div><span id="cntNew">6</span><small>nuevas en la muestra</small></div>
-          <div><span id="cntReloc">2</span><small>reubicadas en la muestra</small></div>
-          <div><span id="cntExist">3</span><small>existentes en la muestra</small></div>
+          <div><span id="cntFault">3</span><small>en falla (no encienden)</small></div>
+          <div><span id="cntDim">3</span><small>con baja intensidad</small></div>
+          <div><span id="cntOk">7</span><small>funcionando OK</small></div>
         </div>
       </details>
 
       <details open>
-        <summary>Datos del proyecto (Excel · MML)</summary>
+        <summary>Qué se corrige en el escenario DESPUÉS</summary>
         <ul class="facts">
-          <li><b>20</b> luminarias nuevas con sus postes <span class="src">ACT.1.2</span></li>
-          <li><b>8</b> luminarias existentes reubicadas <span class="src">ACT.1.3</span></li>
-          <li><b>30</b> luminarias LED de bajo consumo <span class="src">ACT.3.1</span></li>
-          <li>Mantenimiento preventivo y correctivo de las existentes <span class="src">C2</span></li>
-          <li>Ejecución: 1 dic 2026 – 15 abr 2027</li>
+          <li><b>Luminarias apagadas / en falla</b> → se encienden y quedan operativas.</li>
+          <li><b>Luminarias con baja intensidad</b> (lámpara degradada, balasto, suciedad) → se recuperan a plena intensidad.</li>
+          <li><b>Tecnología</b>: se reemplaza la fuente por <b>LED de bajo consumo</b> (color blanco), lo que también reduce el consumo del tramo.</li>
+          <li><b>Mantenimiento preventivo y correctivo</b> de todas las existentes.</li>
+          <li><b>Distribución</b>: se conserva la posición de cada poste; no se agregan ni se mueven.</li>
         </ul>
-        <p class="sub">Metas (indicadores del Excel)</p>
+        <p class="muted">Los estados (falla, baja intensidad, OK) y sus posiciones son <b>ilustrativos</b>. El estado real sale del diagnóstico en campo.</p>
+      </details>
+
+      <details open>
+        <summary>Metas del proyecto</summary>
         <ul class="facts">
-          <li>≥ 90 % de los puntos medidos alcanzan la iluminancia mínima del RETILAP <span class="src">Propósito</span></li>
           <li>≥ 95 % de las luminarias existentes en funcionamiento <span class="src">C2</span></li>
+          <li>≥ 90 % de los puntos medidos alcanzan la iluminancia mínima del RETILAP <span class="src">Propósito</span></li>
           <li>≥ 40 % de reducción del consumo energético del tramo <span class="src">C3</span></li>
           <li>150 habitantes sensibilizados en 4 jornadas <span class="src">ACT.3.2</span></li>
         </ul>
-        <p class="muted">Son metas del proyecto, no resultados medidos. Se verifican con luxómetro e interventoría.</p>
+        <p class="muted">Son metas, no resultados medidos. Se verifican con luxómetro e interventoría.</p>
       </details>
 
       <details>
         <summary>Mejoras de esta versión</summary>
         <ul class="facts">
-          <li><b>Peatones animados</b>: caminan por ambos andenes con animación de brazos y piernas, esperan en el paradero y en la zona de la reja.</li>
-          <li><b>No se agregan luminarias</b> fuera del alcance del Excel: solo se modelan las 20 nuevas + 8 reubicadas + existentes del proyecto.</li>
+          <li><b>Peatones animados solo en el andén sur</b>: caminan y esperan junto al paradero y la reja azul. Ninguno invade la calzada ni el separador.</li>
+          <li><b>Sin luminarias nuevas ni reubicadas</b>: solo se modelan las existentes y se corrigen en el escenario DESPUÉS.</li>
+          <li>Estados realistas: apagadas, baja intensidad y OK, con parpadeo sutil en las que fallan.</li>
           <li><b>Pool de luz</b> en el suelo bajo cada luminaria (más realista de noche).</li>
-          <li><b>Parpadeo sutil</b> en luminarias existentes en falla (problema que el proyecto corrige).</li>
           <li><b>Balanceo de árboles</b> leve por viento.</li>
-          <li>Nuevo interruptor de capa <b>Peatones</b> y atajo <kbd>P</kbd>.</li>
+          <li>Capa <b>Peatones</b> con atajo <kbd>P</kbd>.</li>
         </ul>
       </details>
 
       <details>
         <summary>Aproximaciones y limitaciones</summary>
         <ul class="facts warn">
-          <li>El Excel <b>no especifica</b> potencia, flujo luminoso, temperatura de color, altura de montaje, interdistancia ni la ubicación de cada luminaria.</li>
-          <li>Altura de montaje e interdistancia de las nuevas: <b>valores editables</b> (panel derecho).</li>
-          <li>Anchos de carril, separador y andenes: estimados visualmente a partir de las fotos.</li>
-          <li>La calzada opuesta no se aprecia bien en las fotos; se modela simétrica.</li>
-          <li>La posición y el estado (falla o baja intensidad) de las existentes en la muestra son <b>ilustrativos</b>. El estado real sale del diagnóstico (ACT.2.1).</li>
+          <li>El Excel <b>no especifica</b> potencia, flujo luminoso, temperatura de color ni altura de montaje de las existentes.</li>
+          <li>La <b>distribución de las existentes</b> es aproximada: se asume una interdistancia regular del separador central, con variaciones menores.</li>
+          <li>Los <b>estados</b> (falla / baja intensidad / OK) son ilustrativos. El estado real sale del diagnóstico (ACT.2.1).</li>
           <li>Ámbar = tecnología actual supuesta; blanco = LED. El color real no está en el Excel.</li>
-          <li>El Excel indica 20 nuevas + 8 reubicadas (28) y 30 LED; no aclara a qué corresponden las 2 restantes.</li>
-          <li>La hoja «Resumen» (presupuesto) tiene referencias rotas (#REF!) y no aporta datos.</li>
           <li>La luz es una <b>simulación visual</b>, no un cálculo fotométrico certificado.</li>
           <li>Los peatones son <b>ilustrativos</b>: su cantidad no representa un aforo real ni un estudio de demanda peatonal.</li>
         </ul>
@@ -123,12 +124,12 @@
     </div>
     <div class="panel-body">
       <ul class="legend">
-        <li><i class="dot existing"></i>Luminaria existente</li>
-        <li><i class="dot new"></i>Luminaria nueva (LED + poste)</li>
-        <li><i class="dot relocated"></i>Luminaria reubicada</li>
+        <li><i class="dot existing"></i>Existente funcionando OK</li>
+        <li><i class="dot relocated"></i>Existente con baja intensidad</li>
+        <li><i class="dot new"></i>Existente apagada / en falla</li>
         <li><i class="dot utility"></i>Poste de red eléctrica (contexto)</li>
         <li><i class="swatch amber"></i>Luz actual (ámbar, supuesta)</li>
-        <li><i class="swatch led"></i>Luz LED propuesta</li>
+        <li><i class="swatch led"></i>Luz LED corregida</li>
       </ul>
 
       <h3>Capas</h3>
@@ -151,7 +152,7 @@
         <input type="range" id="rngH" min="6" max="14" step="0.5" value="10" />
       </label>
       <label class="range">
-        <span>Interdistancia nuevas <b id="valS">30 m</b></span>
+        <span>Interdistancia existentes <b id="valS">30 m</b></span>
         <input type="range" id="rngS" min="20" max="45" step="1" value="30" />
       </label>
       <label class="range">
